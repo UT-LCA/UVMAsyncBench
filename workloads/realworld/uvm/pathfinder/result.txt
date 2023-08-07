@@ -1,0 +1,11 @@
+pyramidHeight: 20
+gridSize: [100000]
+border:[20]
+blockSize: 256
+blockGrid:[463]
+targetBlock:[216]
+CUPTI dynproc_kernel iter 0 start: 1679530155077329959 end: 1679530155078946951
+CUPTI dynproc_kernel iter 20 start: 1679530155078953603 end: 1679530155081441509
+CUPTI dynproc_kernel iter 40 start: 1679530155081441880 end: 1679530155083936228
+CUPTI dynproc_kernel iter 60 start: 1679530155083936508 end: 1679530155086433891
+CUPTI dynproc_kernel iter 80 start: 1679530155086434172 end: 1679530155088929332

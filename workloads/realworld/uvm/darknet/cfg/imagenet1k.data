@@ -1,0 +1,8 @@
+classes=1000
+train  = /home/ruihao/work/uvm_async_bench/realworld/standard/darknet/data/imagenet/imagenet1k.train.list
+valid  = /home/ruihao/work/uvm_async_bench/realworld/standard/darknet/data/imagenet/imagenet1k.valid.list
+backup = /home/ruihao/work/uvm_async_bench/realworld/standard/darknet/backup/
+labels = /home/ruihao/work/uvm_async_bench/realworld/standard/darknet/data/imagenet.labels.list
+names  = /home/ruihao/work/uvm_async_bench/realworld/standard/darknet/data/imagenet.shortnames.list
+top=5
+
