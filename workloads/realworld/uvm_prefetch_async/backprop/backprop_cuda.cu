@@ -56,49 +56,11 @@ unsigned int num_blocks = 0;
 ////////////////////////////////////////////////////////////////////////////////
 // Program main
 ////////////////////////////////////////////////////////////////////////////////
-extern inline __attribute__((always_inline)) unsigned long rdtsc()
-{
-  unsigned long a, d;
-
-  __asm__ volatile("rdtsc"
-                   : "=a"(a), "=d"(d));
-
-  return (a | (d << 32));
-}
-
-extern inline __attribute__((always_inline)) unsigned long rdtsp()
-{
-  struct timespec tms;
-  if (clock_gettime(CLOCK_REALTIME, &tms))
-  {
-    return -1;
-  }
-  unsigned long ns = tms.tv_sec * 1000000000;
-  ns += tms.tv_nsec;
-  return ns;
-}
-
-#define GPU_DEVICE 6
-
-void GPU_argv_init()
-{
-  cudaDeviceProp deviceProp;
-  cudaGetDeviceProperties(&deviceProp, GPU_DEVICE);
-  printf("setting device %d with name %s\n", GPU_DEVICE, deviceProp.name);
-  cudaSetDevice(GPU_DEVICE);
-}
-
 int main(int argc, char *argv[])
 {
   uint64_t start_tsc = rdtsc();
   uint64_t start_tsp = rdtsp();
   printf("start_tsc %lu start_tsp %lu\n", start_tsc, start_tsp);
-
-  GPU_argv_init();
-
-  initTrace();
-  startCPU();
-
   num_blocks = atoi(argv[2]);
   setup(argc, argv);
 }
@@ -152,10 +114,10 @@ extern "C" void bpnn_train_cuda(BPNN *net, float *eo, float *eh)
     }
   }
 
-  // GPU_argv_init();
+  GPU_argv_init();
 
-  // initTrace();
-  // startCPU();
+  initTrace();
+  startCPU();
 
   cudaMallocManaged((void **)&input_cuda, (in + 1) * sizeof(float));
   cudaMallocManaged((void **)&output_hidden_cuda, (hid + 1) * sizeof(float));

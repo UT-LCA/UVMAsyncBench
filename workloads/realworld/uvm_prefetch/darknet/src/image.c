@@ -230,7 +230,7 @@ image **load_alphabet()
         alphabets[j] = calloc(128, sizeof(image));
         for(i = 32; i < 127; ++i){
             char buff[256];
-            sprintf(buff, "%s/workloads/realworld/standard/darknet/data/labels/%d_%d.png", value, i, j);
+            sprintf(buff, "%s/data/darknet/data/labels/%d_%d.png", value, i, j);
             alphabets[j][i] = load_image_color(buff, 0, 0);
         }
     }

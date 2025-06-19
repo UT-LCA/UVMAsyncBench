@@ -6,7 +6,7 @@ CC_FLAGS = -g  -O2
 
 # CUDA compiler
 NVCC = $(CUDA_DIR)/bin/nvcc
-NVCC_FLAGS = -I$(CUDA_DIR)/include -I$(CUPTI_INCLUDE) -arch=sm_80 
+NVCC_FLAGS = -code=$(SM_ARCH) -arch=$(COMPUTE) -I$(CUDA_DIR)/include -I$(CUPTI_INCLUDE)
 
 # 'make dbg=1' enables NVCC debugging
 ifeq ($(dbg),1)

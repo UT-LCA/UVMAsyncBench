@@ -40,7 +40,7 @@ include ./findcudalib.mk
 CUDA_PATH ?= $(CUDA_DIR)
 
 # internal flags
-NVCCFLAGS   := -m${OS_SIZE}
+NVCCFLAGS   := -m${OS_SIZE} -code=$(SM_ARCH) -arch=$(COMPUTE)
 CCFLAGS     := -Wno-narrowing
 NVCCLDFLAGS :=
 LDFLAGS     :=
@@ -113,14 +113,16 @@ endif
 GENCODE_SM20    := -gencode arch=compute_20,code=sm_20
 GENCODE_SM30    := -gencode arch=compute_30,code=sm_30 -gencode arch=compute_35,code=\"sm_35,compute_35\"
 GENCODE_SM80    := -gencode arch=compute_80,code=sm_80
-GENCODE_FLAGS   :=   $(GENCODE_SM80)
+# GENCODE_FLAGS   :=   $(GENCODE_SM80)
+
 
 ################################################################################
 
 # Target rules
 all: build
 
-build: ordergraph_30 ordergraph_40 ordergraph_45 ordergraph_50
+build: ordergraph_50 ordergraph_125
+#build: ordergraph_30 ordergraph_40 ordergraph_45 ordergraph_50
 
 # ordergraph_25.o: ordergraph.cu ordergraph_kernel.cu
 # 	$(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -DDATA_25 -o $@ -c $<
@@ -137,8 +139,8 @@ ordergraph_45.o: ordergraph.cu ordergraph_kernel.cu
 ordergraph_50.o: ordergraph.cu ordergraph_kernel.cu
 	$(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -DDATA_50 -o $@ -c $<
 
-# ordergraph_125.o: ordergraph.cu ordergraph_kernel.cu
-# 	$(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -DDATA_125 -o $@ -c $<
+ordergraph_125.o: ordergraph.cu ordergraph_kernel.cu
+	$(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -DDATA_125 -o $@ -c $<
 
 
 
@@ -157,8 +159,8 @@ ordergraph_45: ordergraph_45.o
 ordergraph_50: ordergraph_50.o
 	$(NVCC) $(INCLUDES) $(ALL_LDFLAGS) -o $@ $+ $(CUPTI_ADD_COMMON)/cpu_timestamps.cpp $(CUPTI_ADD_COMMON)/cupti_add.cpp $(LIBRARIES)
 
-# ordergraph_125: ordergraph_125.o
-# 	$(NVCC) $(ALL_LDFLAGS) -o $@ $+ $(LIBRARIES)  
+ordergraph_125: ordergraph_125.o
+	$(NVCC) $(INCLUDES) $(ALL_LDFLAGS) -o $@ $+ $(CUPTI_ADD_COMMON)/cpu_timestamps.cpp $(CUPTI_ADD_COMMON)/cupti_add.cpp $(LIBRARIES)
 
 run: build
 	./ordergraph

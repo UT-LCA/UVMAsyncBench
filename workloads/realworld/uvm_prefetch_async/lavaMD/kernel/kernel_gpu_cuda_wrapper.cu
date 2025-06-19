@@ -34,16 +34,6 @@
 #include "../../../../common/cupti_add.h"
 #include "../../../../common/cpu_timestamps.h"
 
-#define GPU_DEVICE 6
-
-void GPU_argv_init()
-{
-	cudaDeviceProp deviceProp;
-	cudaGetDeviceProperties(&deviceProp, GPU_DEVICE);
-	printf("setting device %d with name %s\n", GPU_DEVICE, deviceProp.name);
-	cudaSetDevice(GPU_DEVICE);
-}
-
 void 
 kernel_gpu_cuda_wrapper(par_str par_cpu,
 						dim_str dim_cpu,

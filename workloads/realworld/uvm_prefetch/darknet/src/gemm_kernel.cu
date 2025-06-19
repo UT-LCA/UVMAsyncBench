@@ -17,8 +17,13 @@ using namespace nvcuda::experimental;
 
 #define PREFETCH_COUNT 2
 
+#ifndef DIM_THREAD_BLOCK_X
 #define DIM_THREAD_BLOCK_X 16
+#endif 
+
+#ifndef DIM_THREAD_BLOCK_Y
 #define DIM_THREAD_BLOCK_Y 16
+#endif
 
 double rtclock()
 {

@@ -30,7 +30,7 @@ using namespace nvcuda::experimental;
 
 #define PREFETCH_COUNT 2
 
-#define BLOCK_SIZE 256
+#define BLOCK_SIZE 64
 #define MAX_NBLOCKS 1024
 #define MIN_NBATCHES 16
 
@@ -171,8 +171,8 @@ __global__ void computeKernel(int taskperthr, int sizepernode,
 
         index = D_findindex(parent, parN);
         index += sizepernode * node;
-
-        ls = D_localscore[index];
+        if (index >=0 && index < NODE_N * sizepernode)
+          ls = D_localscore[index];
 
         if (ls > bestls) {
           bestls = ls;
@@ -219,7 +219,7 @@ __global__ void computeKernel(int taskperthr, int sizepernode,
           lsinblock[compute % PREFETCH_COUNT][tid + i] = (float)tid;
         }
       }
-      block.sync();
+      // block.sync();
     }
     block.sync();
 
@@ -238,6 +238,7 @@ __global__ void computeKernel(int taskperthr, int sizepernode,
         D_resP[bid * 4 + i] = bestparent[i];
       }
     }
+    block.sync();
   }
 }
 

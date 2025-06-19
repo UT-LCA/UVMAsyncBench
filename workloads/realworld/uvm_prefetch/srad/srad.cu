@@ -32,38 +32,6 @@ void usage(int argc, char **argv)
 ////////////////////////////////////////////////////////////////////////////////
 // Program main
 ////////////////////////////////////////////////////////////////////////////////
-extern inline __attribute__((always_inline)) unsigned long rdtsc()
-{
-	unsigned long a, d;
-
-	__asm__ volatile("rdtsc"
-					 : "=a"(a), "=d"(d));
-
-	return (a | (d << 32));
-}
-
-extern inline __attribute__((always_inline)) unsigned long rdtsp()
-{
-	struct timespec tms;
-	if (clock_gettime(CLOCK_REALTIME, &tms))
-	{
-		return -1;
-	}
-	unsigned long ns = tms.tv_sec * 1000000000;
-	ns += tms.tv_nsec;
-	return ns;
-}
-
-#define GPU_DEVICE 6
-
-void GPU_argv_init()
-{
-	cudaDeviceProp deviceProp;
-	cudaGetDeviceProperties(&deviceProp, GPU_DEVICE);
-	printf("setting device %d with name %s\n", GPU_DEVICE, deviceProp.name);
-	cudaSetDevice(GPU_DEVICE);
-}
-
 int main(int argc, char *argv[])
 {
 	uint64_t start_tsc = rdtsc();
@@ -271,15 +239,17 @@ runTest( int argc, char** argv)
 	cudaStream_t stream1;
 	cudaStreamCreate(&stream1);
 
-	cudaMemPrefetchAsync(J_cuda, sizeof(float) * size_I, GPU_DEVICE, stream1);
-	cudaStreamSynchronize(stream1);
+	// cudaMemPrefetchAsync(J_cuda, sizeof(float) * size_I, GPU_DEVICE, stream1);
+	// cudaStreamSynchronize(stream1);
 
-	//Run kernels
-	// srad_cuda_1<<<dimGrid, dimBlock>>>(E_C, W_C, N_C, S_C, J_cuda, C_cuda, cols, rows, q0sqr); 
-	// srad_cuda_2<<<dimGrid, dimBlock>>>(E_C, W_C, N_C, S_C, J_cuda, C_cuda, cols, rows, lambda, q0sqr);
-	srad_cuda_1<<<dimGrid, dimBlock, 0, stream1>>>(E_C, W_C, N_C, S_C, J_cuda, C_cuda, cols, rows, q0sqr, cols / nblocks);
-	srad_cuda_2<<<dimGrid, dimBlock, 0, stream1>>>(E_C, W_C, N_C, S_C, J_cuda, C_cuda, cols, rows, lambda, q0sqr, cols / nblocks);
-	//Copy data from device memory to main memory
+	// //Run kernels
+	// srad_cuda_1<<<dimGrid, dimBlock, 0, stream1>>>(E_C, W_C, N_C, S_C, J_cuda, C_cuda, cols, rows, q0sqr, cols / nblocks);
+	// srad_cuda_2<<<dimGrid, dimBlock, 0, stream1>>>(E_C, W_C, N_C, S_C, J_cuda, C_cuda, cols, rows, lambda, q0sqr, cols / nblocks);
+	// //Copy data from device memory to main memory
+
+	srad_cuda_1<<<dimGrid, dimBlock>>>(E_C, W_C, N_C, S_C, J_cuda, C_cuda, cols, rows, q0sqr, cols / nblocks);
+	srad_cuda_2<<<dimGrid, dimBlock>>>(E_C, W_C, N_C, S_C, J_cuda, C_cuda, cols, rows, lambda, q0sqr, cols / nblocks);
+
 	cudaDeviceSynchronize();
 	memcpy(J, J_cuda, sizeof(float) * size_I);
 

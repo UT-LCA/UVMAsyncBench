@@ -132,6 +132,7 @@ __global__ void computeKernel(int taskperthr, int sizepernode,
   int fetch = 0;
   int end_tile = fetch + nbatches;
   int bestparent[4] = {0}, parent[5] = {-1};
+  int blocknum = total / (256 * taskperthr) + 1;
 
   for (int compute = fetch; compute < end_tile; compute++) {
     for (; fetch < end_tile && fetch < compute + PREFETCH_COUNT; fetch++) {
@@ -171,8 +172,8 @@ __global__ void computeKernel(int taskperthr, int sizepernode,
 
         index = D_findindex(parent, parN);
         index += sizepernode * node;
-
-        ls = D_localscore[index];
+        if (index >=0 && index < NODE_N * sizepernode)
+          ls = D_localscore[index];
 
         if (ls > bestls) {
           bestls = ls;

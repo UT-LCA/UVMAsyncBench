@@ -99,34 +99,6 @@ void deallocateMemory()
 }
 /* -------------- deallocateMemory() end ------------------- */
 
-extern inline __attribute__((always_inline)) unsigned long rdtsc()
-{
-	   unsigned long a, d;
-
-	      __asm__ volatile("rdtsc" : "=a" (a), "=d" (d));
-
-	         return (a | (d << 32));
-}
-
-extern inline __attribute__((always_inline)) unsigned long rdtsp() {
-		struct timespec tms;
-		    if (clock_gettime(CLOCK_REALTIME, &tms)) {
-			            return -1;
-				        }
-		        unsigned long ns = tms.tv_sec * 1000000000;
-			    ns += tms.tv_nsec;
-			        return ns;
-}
-
-#define GPU_DEVICE 6
-
-void GPU_argv_init()
-{
-  cudaDeviceProp deviceProp;
-  cudaGetDeviceProperties(&deviceProp, GPU_DEVICE);
-  printf("setting device %d with name %s\n", GPU_DEVICE, deviceProp.name);
-  cudaSetDevice(GPU_DEVICE);
-}
 ////////////////////////////////////////////////////////////////////////////////
 // Program main																  //
 
@@ -215,17 +187,24 @@ kmeansCuda(float  **feature,				/* in: [npoints][nfeatures] */
 									   membership_d);
 		cudaDeviceSynchronize();
 
+		cudaError_t error = cudaGetLastError();
+		if(error != cudaSuccess)
+		{
+			// print the CUDA error message and exit
+			printf("CUDA error: %s\n", cudaGetErrorString(error));
+		}
+
 		/* copy back membership (device to host) */
 		cudaMemcpy(membership_new, membership_d, npoints * sizeof(int), cudaMemcpyDeviceToHost);	
-    
 	/* for each point, sum data points in each cluster
 	   and see if membership has changed:
 	     if so, increase delta and change old membership, and update new_centers;
 	     otherwise, update new_centers */
 	delta = 0;
 	for (i = 0; i < npoints; i++)
-	{		
+	{	
 		int cluster_id = membership_new[i];
+		// printf("point %d, cluster_id is %d\n", i, cluster_id);
 		new_centers_len[cluster_id]++;
 		if (membership_new[i] != membership[i])
 		{

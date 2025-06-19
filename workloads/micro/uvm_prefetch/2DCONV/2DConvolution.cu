@@ -67,10 +67,8 @@ float percentDiff(double val1, double val2)
 //define the error threshold for the results "not matching"
 #define PERCENT_DIFF_ERROR_THRESHOLD 0.05
 
-#define GPU_DEVICE 5
-
 /* Problem size */
-#define SIZE 4096
+#define SIZE 65536
 #define NBLOCKS 32
 #define BATCH_SIZE 4
 
@@ -150,15 +148,6 @@ void compareResults(DATA_TYPE* B, DATA_TYPE* B_outputFromGpu)
 	// Print results
 	printf("Non-Matching CPU-GPU Outputs Beyond Error Threshold of %4.2f Percent: %d\n", PERCENT_DIFF_ERROR_THRESHOLD, fail);
 	
-}
-
-
-void GPU_argv_init()
-{
-	cudaDeviceProp deviceProp;
-	cudaGetDeviceProperties(&deviceProp, GPU_DEVICE);
-	printf("setting device %d with name %s\n",GPU_DEVICE,deviceProp.name);
-	cudaSetDevice( GPU_DEVICE );
 }
 
 __global__ void Convolution2D_kernel(DATA_TYPE *A, DATA_TYPE *B, uint64_t NI, uint64_t NJ, uint64_t block_size)
@@ -289,45 +278,23 @@ void convolution2DCuda(DATA_TYPE *A_gpu, DATA_TYPE *B_gpu)
 
 	// t_start = rtclock();
 
-	cudaStream_t stream1;
-	cudaStream_t stream2;
-	cudaStreamCreate(&stream1);
-	cudaStreamCreate(&stream2);
+	// cudaStream_t stream1;
+	// cudaStream_t stream2;
+	// cudaStreamCreate(&stream1);
+	// cudaStreamCreate(&stream2);
 
-	cudaMemPrefetchAsync(A_gpu, NI * NJ * sizeof(DATA_TYPE), GPU_DEVICE, stream1);
-	cudaStreamSynchronize(stream1);
-	cudaMemPrefetchAsync(B_gpu, NI * NJ * sizeof(DATA_TYPE), GPU_DEVICE, stream2);
-	cudaStreamSynchronize(stream2);
-	Convolution2D_kernel<<<grid, block, 0, stream2>>>(A_gpu, B_gpu, NI, NJ, block_size);
-	cudaDeviceSynchronize();
-
-	// Convolution2D_kernel<<<grid, block>>>(A_gpu, B_gpu, NI, NJ, block_size);
+	// cudaMemPrefetchAsync(A_gpu, NI * NJ * sizeof(DATA_TYPE), GPU_DEVICE, stream1);
+	// cudaStreamSynchronize(stream1);
+	// cudaMemPrefetchAsync(B_gpu, NI * NJ * sizeof(DATA_TYPE), GPU_DEVICE, stream2);
+	// cudaStreamSynchronize(stream2);
+	// Convolution2D_kernel<<<grid, block, 0, stream2>>>(A_gpu, B_gpu, NI, NJ, block_size);
 	// cudaDeviceSynchronize();
+
+	Convolution2D_kernel<<<grid, block>>>(A_gpu, B_gpu, NI, NJ, block_size);
+	cudaDeviceSynchronize();
 
 	// t_end = rtclock();
 	// fprintf(stdout, "GPU Runtime: %0.6lfs\n", t_end - t_start); //);
-}
-
-extern inline __attribute__((always_inline)) unsigned long rdtsc()
-{
-	unsigned long a, d;
-
-	__asm__ volatile("rdtsc"
-					 : "=a"(a), "=d"(d));
-
-	return (a | (d << 32));
-}
-
-extern inline __attribute__((always_inline)) unsigned long rdtsp()
-{
-	struct timespec tms;
-	if (clock_gettime(CLOCK_REALTIME, &tms))
-	{
-		return -1;
-	}
-	unsigned long ns = tms.tv_sec * 1000000000;
-	ns += tms.tv_nsec;
-	return ns;
 }
 
 int main(int argc, char *argv[])

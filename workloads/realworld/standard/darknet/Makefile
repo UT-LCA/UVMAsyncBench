@@ -11,8 +11,9 @@ DEBUG=0
 #      -gencode arch=compute_20,code=[sm_20,sm_21] \ This one is deprecated?
 
 # This is what I use, uncomment if you know your arch and want to specify
-ARCH= -gencode arch=compute_80,code=sm_80 \
-#ARCH= -arch=sm_80
+#ARCH= -gencode arch=compute_80,code=sm_80 \
+
+ARCH= -code=$(SM_ARCH) -arch=$(COMPUTE)
 
 VPATH=./src/:./examples:$(CUPTI_ADD_COMMON)
 SLIB=libdarknet.so
@@ -22,13 +23,18 @@ OBJDIR=./obj/
 
 CC=gcc
 CPP=g++
-NVCC=nvcc 
+# NVCC=nvcc --default-stream per-thread
+NVCC=nvcc
 AR=ar
 ARFLAGS=rcs
 OPTS=-Ofast
 LDFLAGS= -lm -pthread
 COMMON= -Iinclude/ -Isrc/
 CFLAGS=-Wall -Wno-unused-result -Wno-unknown-pragmas -Wfatal-errors -fPIC
+ifeq ($(PROFILE), 1) 
+CFLAGS=-Wall -Wno-unused-result -Wno-unknown-pragmas -Wfatal-errors -fPIC -DPROFILE
+endif
+
 
 ifeq ($(OPENMP), 1) 
 CFLAGS+= -fopenmp
@@ -76,8 +82,6 @@ OBJS = $(addprefix $(OBJDIR), $(OBJ))
 DEPS = $(wildcard src/*.h) Makefile include/darknet.h
 
 all: obj backup results $(SLIB) $(ALIB) $(EXEC)
-#all: obj  results $(SLIB) $(ALIB) $(EXEC)
-
 
 $(EXEC): $(EXECOBJ) $(ALIB)
 	$(CC) $(COMMON) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(ALIB)
@@ -90,9 +94,6 @@ $(SLIB): $(OBJS)
 
 $(OBJDIR)%.o: %.cpp $(DEPS)
 	$(CPP) $(COMMON) $(CFLAGS) -c $< -o $@
-
-# $(OBJDIR)cupti_add.o: cupti_add.cpp $(DEPS)
-# 	$(NVCC) -Iinclude/ -Isrc/ -I/apps/cuda-11.4/include/ -I/apps/cuda-11.4/extras/CUPTI/include/ -c $< -o $@
 
 $(OBJDIR)%.o: %.c $(DEPS)
 	$(CC) $(COMMON) $(CFLAGS) -c $< -o $@

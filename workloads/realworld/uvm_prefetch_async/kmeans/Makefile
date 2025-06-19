@@ -2,10 +2,11 @@ include ../../../common/make.config
 
 # C compiler
 CC = gcc
-CC_FLAGS = -g -fopenmp -O2 
+#CC_FLAGS = -g -fopenmp -O2 
+CC_FLAGS = -O2 
 
 # CUDA compiler
-NVCC = $(CUDA_DIR)/bin/nvcc
+NVCC = $(CUDA_DIR)/bin/nvcc -code=$(SM_ARCH) -arch=$(COMPUTE)
 NVCC_FLAGS = -I$(CUDA_DIR)/include -I$(CUPTI_INCLUDE)
 
 # 'make dbg=1' enables NVCC debugging

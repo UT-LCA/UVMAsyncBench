@@ -10,7 +10,7 @@
 #include <sys/time.h>
 
 #ifdef GPU
-    #define GPU_DEVICE 6
+    #include "../../../../common/gpu_id.h"
     #define BLOCK 512
 
     #include "cuda_runtime.h"

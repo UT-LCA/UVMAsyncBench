@@ -43,10 +43,21 @@ void train_classifier(char *datacfg, char *cfgfile, char *weightfile, int *gpus,
     printf("Learning Rate: %g, Momentum: %g, Decay: %g\n", net->learning_rate, net->momentum, net->decay);
     list *options = read_data_cfg(datacfg);
 
-    char *backup_directory = option_find_str(options, "backup", "/backup/");
+    // Ruihao
     int tag = option_find_int_quiet(options, "tag", 0);
-    char *label_list = option_find_str(options, "labels", "data/labels.list");
-    char *train_list = option_find_str(options, "train", "data/train.list");
+
+    char *backup_directory_cfg = option_find_str(options, "backup", "/backup/");
+    char *label_list_cfg = option_find_str(options, "labels", "data/labels.list");
+    char *train_list_cfg = option_find_str(options, "train", "data/train.list");
+    
+    char *env = getenv("UVMAsyncBench_BASE");
+    char backup_directory[256];
+    char label_list[256];
+    char train_list[256];
+    sprintf(backup_directory, "%s/%s", env, backup_directory_cfg);
+    sprintf(label_list, "%s/%s", env, label_list_cfg);
+    sprintf(train_list, "%s/%s", env, train_list_cfg);
+    // Ruihao
     char *tree = option_find_str(options, "tree", 0);
     if (tree) net->hierarchy = read_tree(tree);
     int classes = option_find_int(options, "classes", 2);
@@ -94,6 +105,7 @@ void train_classifier(char *datacfg, char *cfgfile, char *weightfile, int *gpus,
     args.d = &buffer;
     load_thread = load_data(args);
 
+    // initTrace();
     int count = 0;
     int epoch = (*net->seen)/N;
     while(get_current_batch(net) < net->max_batches || net->max_batches == 0){
@@ -160,11 +172,12 @@ void train_classifier(char *datacfg, char *cfgfile, char *weightfile, int *gpus,
     save_weights(net, buff);
     pthread_join(load_thread, 0);
 
-    free_network(net);
+    // free_network(net);
     if(labels) free_ptrs((void**)labels, classes);
     free_ptrs((void**)paths, plist->size);
     free_list(plist);
     free(base);
+    // finiTrace();
 }
 
 void validate_classifier_crop(char *datacfg, char *filename, char *weightfile)
@@ -565,10 +578,16 @@ void predict_classifier(char *datacfg, char *cfgfile, char *weightfile, char *fi
 
     list *options = read_data_cfg(datacfg);
 
-    char *name_list = option_find_str(options, "names", 0);
-    if(!name_list) name_list = option_find_str(options, "labels", "data/labels.list");
+    // Ruihao
+    char *name_list_cfg = option_find_str(options, "names", 0);
+    char *env = getenv("UVMAsyncBench_BASE");
+    char name_list[256];
+    sprintf(name_list, "%s/%s", env, name_list_cfg);
+    // if(!name_list) name_list = option_find_str(options, "labels", "data/labels.list");
+    // Ruihao
     if(top == 0) top = option_find_int(options, "top", 1);
 
+    // initTrace();
     int i = 0;
     char **names = get_labels(name_list);
     clock_t time;
@@ -610,6 +629,7 @@ void predict_classifier(char *datacfg, char *cfgfile, char *weightfile, char *fi
         free_image(im);
         if (filename) break;
     }
+    // finiTrace();
 }
 
 
@@ -696,13 +716,19 @@ void test_classifier(char *datacfg, char *cfgfile, char *weightfile, int target_
 
     list *options = read_data_cfg(datacfg);
 
-    char *test_list = option_find_str(options, "test", "data/test.list");
+    // Ruihao
+    char *test_list_cfg = option_find_str(options, "test", "data/test.list");
+    char *env = getenv("UVMAsyncBench_BASE");
+    char test_list[256];
+    sprintf(test_list, "%s/%s", env, test_list_cfg);
+    // Ruihao
     int classes = option_find_int(options, "classes", 2);
 
     list *plist = get_paths(test_list);
 
     char **paths = (char **)list_to_array(plist);
     int m = plist->size;
+    m = net->max_batches * net->batch;
     free_list(plist);
 
     clock_t time;
@@ -720,8 +746,10 @@ void test_classifier(char *datacfg, char *cfgfile, char *weightfile, int target_
     args.d = &buffer;
     args.type = OLD_CLASSIFICATION_DATA;
 
+    // initTrace();
     pthread_t load_thread = load_data_in_thread(args);
-    for(curr = net->batch; curr < m; curr += net->batch){
+    for(curr = net->batch; curr <= m; curr += net->batch){
+    // while(get_current_batch(net) < net->max_batches || net->max_batches == 0){
         time=clock();
 
         pthread_join(load_thread, 0);
@@ -742,19 +770,19 @@ void test_classifier(char *datacfg, char *cfgfile, char *weightfile, int target_
             //layer l = net->layers[target_layer];
         }
 
-        for(i = 0; i < pred.rows; ++i){
-            printf("%s", paths[curr-net->batch+i]);
-            for(j = 0; j < pred.cols; ++j){
-                printf("\t%g", pred.vals[i][j]);
-            }
-            printf("\n");
-        }
-
-        free_matrix(pred);
+        // for(i = 0; i < pred.rows; ++i){
+        //     printf("%s", paths[curr-net->batch+i]);
+        //     for(j = 0; j < pred.cols; ++j){
+        //         printf("\t%g", pred.vals[i][j]);
+        //     }
+        //     printf("\n");
+        // }
 
         fprintf(stderr, "%lf seconds, %d images, %d total\n", sec(clock()-time), val.X.rows, curr);
+        free_matrix(pred);
         free_data(val);
     }
+    // finiTrace();
 }
 
 void file_output_classifier(char *datacfg, char *filename, char *weightfile, char *listfile)

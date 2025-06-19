@@ -64,13 +64,11 @@ float percentDiff(double val1, double val2)
 	}
 }
 
-#define GPU_DEVICE 5
-
 //define the error threshold for the results "not matching"
 #define PERCENT_DIFF_ERROR_THRESHOLD 0.005
 
 /* Problem size */
-#define SIZE 4096000
+#define SIZE 8589934592
 #define ITER 100
 uint64_t NI;
 
@@ -121,21 +119,13 @@ void compareResults(DATA_TYPE* A, DATA_TYPE* A_outputFromGpu)
 	printf("Non-Matching CPU-GPU Outputs Beyond Error Threshold of %4.2f Percent: %d\n", PERCENT_DIFF_ERROR_THRESHOLD, fail);
 }
 
-
-void GPU_argv_init()
-{
-	cudaDeviceProp deviceProp;
-	cudaGetDeviceProperties(&deviceProp, GPU_DEVICE);
-	printf("setting device %d with name %s\n",GPU_DEVICE,deviceProp.name);
-	cudaSetDevice( GPU_DEVICE );
-}
-
 __global__ void vector_rand_kernel(DATA_TYPE *a, uint64_t NI, uint64_t iterations, uint64_t block_size, size_t seed)
 {
 	// Compute each thread's global row and column index
 	const uint64_t mem_size = DIM_THREAD_BLOCK * BATCH_SIZE;
 
-	__shared__ DATA_TYPE tmp[mem_size];
+	// __shared__ DATA_TYPE tmp[mem_size];
+	extern  __shared__ DATA_TYPE tmp[];
 
 	curandState_t randState;
 	size_t tx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -189,32 +179,16 @@ void saxpyCuda(DATA_TYPE *A, DATA_TYPE *A_gpu, uint64_t iterations, uint64_t blo
 	dim3 grid(NI / block_size);
 
 	//t_start = rtclock();
+	int MaxBytesofSharedMemory = DIM_THREAD_BLOCK * BATCH_SIZE * sizeof(DATA_TYPE);
+	cudaFuncSetAttribute(vector_rand_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, MaxBytesofSharedMemory);
+
 	cudaMemcpy(A_gpu, A, sizeof(DATA_TYPE) * NI, cudaMemcpyHostToDevice);
-	vector_rand_kernel<<<grid, block>>>(A_gpu, NI, iterations, block_size, 832945);
+	vector_rand_kernel<<<grid, block, MaxBytesofSharedMemory>>>(A_gpu, NI, iterations, block_size, 832945);
 	cudaDeviceSynchronize();
 	cudaMemcpy(A, A_gpu, sizeof(DATA_TYPE) * NI, cudaMemcpyDeviceToHost);
 	//t_end = rtclock();
 
 	//fprintf(stdout, "GPU Runtime: %0.6lfs\n", t_end - t_start);   
-}
-
-extern inline __attribute__((always_inline)) unsigned long rdtsc()
-{
-           unsigned long a, d;
-
-              __asm__ volatile("rdtsc" : "=a" (a), "=d" (d));
-
-                 return (a | (d << 32));
-}
-
-extern inline __attribute__((always_inline)) unsigned long rdtsp() {
-                struct timespec tms;
-                    if (clock_gettime(CLOCK_REALTIME, &tms)) {
-                                    return -1;
-                                        }
-                        unsigned long ns = tms.tv_sec * 1000000000;
-                            ns += tms.tv_nsec;
-                                return ns;
 }
 
 int main(int argc, char *argv[])

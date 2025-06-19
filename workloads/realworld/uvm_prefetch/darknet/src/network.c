@@ -794,6 +794,9 @@ void backward_network_gpu(network *netp)
     network orig = net;
     cuda_set_device(net.gpu_index);
     for(i = net.n-1; i >= 0; --i){
+        // Ruihao
+        // fprintf(stderr, "backward_network_gpu Layer %d\n", i);
+        // Ruihao
         layer l = net.layers[i];
         if(l.stopbackward) break;
         if(i == 0){
@@ -808,6 +811,9 @@ void backward_network_gpu(network *netp)
         net.index = i;
         l.backward_gpu(l, net);
     }
+    // Ruihao
+    // fprintf(stderr, "backward_network_gpu succeed\n");
+    // Ruihao
 }
 
 void update_network_gpu(network *netp)

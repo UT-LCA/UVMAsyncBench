@@ -35,19 +35,38 @@ getUvmCounterKindString(CUpti_ActivityUnifiedMemoryCounterKind kind)
 {
     switch (kind)
     {
-    case CUPTI_ACTIVITY_UNIFIED_MEMORY_COUNTER_KIND_BYTES_TRANSFER_HTOD:
-        return "BYTES_TRANSFER_HTOD";
-    case CUPTI_ACTIVITY_UNIFIED_MEMORY_COUNTER_KIND_BYTES_TRANSFER_DTOH:
-        return "BYTES_TRANSFER_DTOH";
-    case CUPTI_ACTIVITY_UNIFIED_MEMORY_COUNTER_KIND_CPU_PAGE_FAULT_COUNT:
-        return "CPU_PAGE_FAULTS";
-    case CUPTI_ACTIVITY_UNIFIED_MEMORY_COUNTER_KIND_GPU_PAGE_FAULT:
-        return "GPU_PAGE_FAULTS";
+        case CUPTI_ACTIVITY_UNIFIED_MEMORY_COUNTER_KIND_CPU_PAGE_FAULT_COUNT:
+            return "CPU_PAGE_FAULTS";
+        case CUPTI_ACTIVITY_UNIFIED_MEMORY_COUNTER_KIND_GPU_PAGE_FAULT:
+            return "GPU_PAGE_FAULTS";
+        case CUPTI_ACTIVITY_UNIFIED_MEMORY_COUNTER_KIND_BYTES_TRANSFER_HTOD:
+            return "BYTES_TRANSFER_HTOD";
+        case CUPTI_ACTIVITY_UNIFIED_MEMORY_COUNTER_KIND_BYTES_TRANSFER_DTOH:
+            return "BYTES_TRANSFER_DTOH";
     default:
         break;
     }
     return "<unknown>";
 }
+
+// static const char *
+// getUvmCounterKindString(CUpti_ActivityUnifiedMemoryAccessType kind)
+// {
+//     switch (kind)
+//     {
+//         case CUPTI_ACTIVITY_UNIFIED_MEMORY_COUNTER_KIND_CPU_PAGE_FAULT_COUNT:
+//             return "CPU_PAGE_FAULTS";
+//         case CUPTI_ACTIVITY_UNIFIED_MEMORY_COUNTER_KIND_GPU_PAGE_FAULT:
+//             return "GPU_PAGE_FAULTS";
+//         case CUPTI_ACTIVITY_UNIFIED_MEMORY_COUNTER_KIND_BYTES_TRANSFER_HTOD:
+//             return "BYTES_TRANSFER_HTOD";
+//         case CUPTI_ACTIVITY_UNIFIED_MEMORY_COUNTER_KIND_BYTES_TRANSFER_DTOH:
+//             return "BYTES_TRANSFER_DTOH";
+//     default:
+//         break;
+//     }
+//     return "<unknown>";
+// }
 
 static void
 printActivity(CUpti_Activity *record)
@@ -99,6 +118,7 @@ printActivity(CUpti_Activity *record)
             CUpti_ActivityUnifiedMemoryCounter2 *uvm = (CUpti_ActivityUnifiedMemoryCounter2 *)record;
             printf("UVM MEMCPY %s, size %llu, %llu, %llu, %llu \n",
                    getUvmCounterKindString(uvm->counterKind),
+                    // getUvmCounterKindString(uvm->kind),
                    (unsigned long long)uvm->value,
                    (unsigned long long)(uvm->start),
                    (unsigned long long)(uvm->end),
@@ -163,7 +183,6 @@ void CUPTIAPI bufferCompleted(CUcontext ctx, uint32_t streamId, uint8_t *buffer,
 //     return;
 // }
 
-
 void initTrace()
 {
     size_t attrValue = 0, attrValueSize = sizeof(size_t);
@@ -203,7 +222,6 @@ void initTrace()
     CUPTI_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_RUNTIME));
     CUPTI_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_MEMCPY));
     CUPTI_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_UNIFIED_MEMORY_COUNTER));
-    // CUPTI_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_UNIFIED_MEMORY_COUNTER_KIND_COUNT));
 
     // CUPTI_ACTIVITY_UNIFIED_MEMORY_COUNTER_KIND_GPU_PAGE_FAULT 
     // CUPTI_ACTIVITY_UNIFIED_MEMORY_COUNTER_KIND_CPU_PAGE_FAULT_COUNT
@@ -219,11 +237,13 @@ void initTrace()
     printf("%s = %llu B\n", "CUPTI_ACTIVITY_ATTR_DEVICE_BUFFER_SIZE", (long long unsigned)attrValue);
     attrValue *= 2;
     CUPTI_CALL(cuptiActivitySetAttribute(CUPTI_ACTIVITY_ATTR_DEVICE_BUFFER_SIZE, &attrValueSize, &attrValue));
+    printf("%s = %llu B\n", "CUPTI_ACTIVITY_ATTR_DEVICE_BUFFER_SIZE", (long long unsigned)attrValue);
 
     CUPTI_CALL(cuptiActivityGetAttribute(CUPTI_ACTIVITY_ATTR_DEVICE_BUFFER_POOL_LIMIT, &attrValueSize, &attrValue));
     printf("%s = %llu\n", "CUPTI_ACTIVITY_ATTR_DEVICE_BUFFER_POOL_LIMIT", (long long unsigned)attrValue);
     attrValue *= 2;
     CUPTI_CALL(cuptiActivitySetAttribute(CUPTI_ACTIVITY_ATTR_DEVICE_BUFFER_POOL_LIMIT, &attrValueSize, &attrValue));
+    printf("%s = %llu\n", "CUPTI_ACTIVITY_ATTR_DEVICE_BUFFER_POOL_LIMIT", (long long unsigned)attrValue);
 
     CUPTI_CALL(cuptiGetTimestamp(&startTimestamp));
 }
@@ -234,3 +254,9 @@ void finiTrace()
     CUPTI_CALL(cuptiActivityFlushAll(1));
 }
 
+void GPU_argv_init() {
+  cudaDeviceProp deviceProp;
+  cudaGetDeviceProperties(&deviceProp, GPU_DEVICE);
+  printf("setting device %d with name %s\n", GPU_DEVICE, deviceProp.name);
+  cudaSetDevice(GPU_DEVICE);
+}

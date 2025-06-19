@@ -55,32 +55,7 @@ int C(int n, int a);
 
 FILE *fpout;
 
-extern inline __attribute__((always_inline)) unsigned long rdtsc() {
-  unsigned long a, d;
-
-  __asm__ volatile("rdtsc" : "=a"(a), "=d"(d));
-
-  return (a | (d << 32));
-}
-
-extern inline __attribute__((always_inline)) unsigned long rdtsp() {
-  struct timespec tms;
-  if (clock_gettime(CLOCK_REALTIME, &tms)) {
-    return -1;
-  }
-  unsigned long ns = tms.tv_sec * 1000000000;
-  ns += tms.tv_nsec;
-  return ns;
-}
-
-#define GPU_DEVICE 6
-
-void GPU_argv_init() {
-  cudaDeviceProp deviceProp;
-  cudaGetDeviceProperties(&deviceProp, GPU_DEVICE);
-  printf("setting device %d with name %s\n", GPU_DEVICE, deviceProp.name);
-  cudaSetDevice(GPU_DEVICE);
-}
+#define THREADS 64
 
 int main(int argc, char *argv[]) {
   /*
@@ -131,6 +106,8 @@ int main(int argc, char *argv[]) {
   genScore();
   pre2 = clock();
   printf("OK, begin to generate orders.\n");
+  // initTrace();
+  // startCPU();
 
   i = 0;
   while (i != ITER) {
@@ -209,12 +186,15 @@ int main(int argc, char *argv[]) {
 
   } // endwhile
 
-  cudaFreeHost(localscore);
+  // cudaFreeHost(localscore);
+  free(localscore);
   cudaFree(D_localscore);
   cudaFree(D_parent);
 
-  cudaFreeHost(scores);
-  cudaFreeHost(parents);
+  // cudaFreeHost(scores);
+  // cudaFreeHost(parents);
+  free(scores);
+  free(parents);
   cudaFree(D_Score);
   cudaFree(D_resP);
 
@@ -296,7 +276,8 @@ void initial() {
   sizepernode = tmp;
   tmp *= NODE_N;
 
-  cudaMallocHost((void **)&localscore, tmp * sizeof(float));
+  // cudaMallocHost((void **)&localscore, tmp * sizeof(float));
+  localscore = (float *) malloc(tmp * sizeof(float));
 
   for (i = 0; i < tmp; i++)
     localscore[i] = 0;
@@ -377,10 +358,22 @@ int ConCore() {
 }
 
 void genScore() {
+  // cudaMallocHost((void **)&scores,
+  //                (sizepernode / (THREADS * taskperthr) + MIN_NBATCHES) * sizeof(float));
+  // cudaMallocHost((void **)&parents,
+  //                (sizepernode / (THREADS * taskperthr) + MIN_NBATCHES) * 4 * sizeof(int));
+  scores = (float *) malloc((sizepernode / (THREADS * taskperthr) + MIN_NBATCHES) * sizeof(float));
+  parents = (int *) malloc((sizepernode / (THREADS * taskperthr) + MIN_NBATCHES) * 4 * sizeof(int));
+  cudaMalloc((void **)&D_Score,
+             (sizepernode / (THREADS * taskperthr) + MIN_NBATCHES) * sizeof(float));
+  cudaMalloc((void **)&D_parent, NODE_N * sizeof(bool));
+  cudaMalloc((void **)&D_resP,
+             (sizepernode / (THREADS * taskperthr) + MIN_NBATCHES) * 4 * sizeof(int));
+             
   int *D_data;
   float *D_LG;
-  dim3 grid(sizepernode / 256 + 1, 1, 1);
-  dim3 threads(256, 1, 1);
+  dim3 grid(sizepernode / THREADS + 1, 1, 1);
+  dim3 threads(THREADS, 1, 1);
 
   Pre_logGamma();
   // cudaPrintfInit();
@@ -399,19 +392,10 @@ void genScore() {
   // cudaPrintfDisplay(stdout, true);
   // cudaPrintfEnd();
 
-  cudaFreeHost(LG);
+  // cudaFreeHost(LG);
+  free(LG);
   cudaFree(D_LG);
   cudaFree(D_data);
-
-  cudaMallocHost((void **)&scores,
-                 (sizepernode / (256 * taskperthr) + 1) * sizeof(float));
-  cudaMallocHost((void **)&parents,
-                 (sizepernode / (256 * taskperthr) + 1) * 4 * sizeof(int));
-  cudaMalloc((void **)&D_Score,
-             (sizepernode / (256 * taskperthr) + 1) * sizeof(float));
-  cudaMalloc((void **)&D_parent, NODE_N * sizeof(bool));
-  cudaMalloc((void **)&D_resP,
-             (sizepernode / (256 * taskperthr) + 1) * 4 * sizeof(int));
 }
 
 int convert(int *parent, int parN) {
@@ -430,7 +414,8 @@ int convert(int *parent, int parN) {
 
 void Pre_logGamma() {
 
-  cudaMallocHost((void **)&LG, (DATA_N + 2) * sizeof(float));
+  // cudaMallocHost((void **)&LG, (DATA_N + 2) * sizeof(float));
+  LG = (float *) malloc((DATA_N + 2) * sizeof(float));
 
   LG[1] = log(1.0);
   float i;
@@ -530,7 +515,7 @@ float findBestGraph() {
     if (posN >= 0) {
       total = C(posN, 4) + C(posN, 3) + C(posN, 2) + posN + 1;
       taskperthr = 1;
-      blocknum = total / (256 * taskperthr) + 1;
+      blocknum = total / (THREADS * taskperthr) + 1;
 
       int nbatches = MIN_NBATCHES;
 
@@ -547,7 +532,7 @@ float findBestGraph() {
       cudaMemcpy(D_parent, orders[node], NODE_N * sizeof(bool),
                  cudaMemcpyHostToDevice);
 
-      computeKernel<<<blocknum, 256>>>(
+      computeKernel<<<blocknum, THREADS>>>(
           taskperthr, sizepernode, D_localscore, D_parent, node, total, D_Score,
           D_resP, nbatches);
       cudaDeviceSynchronize();

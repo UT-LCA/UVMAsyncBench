@@ -19,10 +19,10 @@ using namespace nvcuda::experimental;
 #define SDATA(index) CUT_BANK_CHECKER(sdata, index)
 
 // t_features has the layout dim0[points 0-m-1]dim1[ points 0-m-1]...
-texture<float, 1, cudaReadModeElementType> t_features;
+// texture<float, 1, cudaReadModeElementType> t_features;
 // t_features_flipped has the layout point0[dim 0-n-1]point1[dim 0-n-1]
-texture<float, 1, cudaReadModeElementType> t_features_flipped;
-texture<float, 1, cudaReadModeElementType> t_clusters;
+// texture<float, 1, cudaReadModeElementType> t_features_flipped;
+// texture<float, 1, cudaReadModeElementType> t_clusters;
 
 __constant__ float c_clusters[ASSUMED_NR_CLUSTERS * 34]; /* constant memory for cluster centers */
 
@@ -99,35 +99,28 @@ kmeansPoint(float *features, /* in: [npoints*nfeatures] */
 		int index = -1;
 
 		float min_dist = FLT_MAX;
-		float dist; /* distance square between a point to cluster center */
+		float dist;
 
-		/* find the cluster center id with min distance to pt */
 		for (int i = 0; i < nclusters; i++)
 		{
-			int cluster_base_index = i * nfeatures; /* base index of cluster centers for inverted array */
-			float ans = 0.0;						/* Euclidean distance sqaure */
+			int cluster_base_index = i*nfeatures;
+			float ans = 0.0;
 
 			for (int j = 0; j < nfeatures; j++)
 			{
-				// int addr = point_id + j * npoints; /* appropriate index of data point */
-				// float diff = (tex1Dfetch(t_features,addr) - c_clusters[cluster_base_index + j]);	/* distance between a data point to cluster centers */
-
-				// int addr = point_id + j * npoints; /* appropriate index of data point */
-				// float diff = features[addr] - c_clusters[cluster_base_index + j]; /* distance between a data point to cluster centers */
-				float diff = tmp_features[threadIdx.y][threadIdx.x][j] - c_clusters[cluster_base_index + j]; /* distance between a data point to cluster centers */
-				ans += diff * diff;																			 /* sum of squares */
+				float diff = tmp_features[threadIdx.y][threadIdx.x][j] - c_clusters[cluster_base_index + j];
+				ans += diff * diff;
 			}
 			dist = ans;
 			block.sync();
 
-			/* see if distance is smaller than previous ones:
-			if so, change minimum distance and save index of cluster center */
 			if (dist < min_dist)
 			{
 				min_dist = dist;
 				index = i;
 			}
 		}
+		if (tile * batch_size + point_id < npoints)
 		membership[tile * batch_size + point_id] = index;
 		block.sync();
 	}

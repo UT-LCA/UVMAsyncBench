@@ -63,8 +63,6 @@ float percentDiff(double val1, double val2)
 	}
 }
 
-#define GPU_DEVICE 5
-
 // define the error threshold for the results "not matching"
 #define PERCENT_DIFF_ERROR_THRESHOLD 0.05
 
@@ -137,14 +135,6 @@ void compareResults(DATA_TYPE *C, DATA_TYPE *C_outputFromGpu)
 	printf("Non-Matching CPU-GPU Outputs Beyond Error Threshold of %4.2f Percent: %d\n", PERCENT_DIFF_ERROR_THRESHOLD, fail);
 }
 
-void GPU_argv_init()
-{
-	cudaDeviceProp deviceProp;
-	cudaGetDeviceProperties(&deviceProp, GPU_DEVICE);
-	printf("setting device %d with name %s\n", GPU_DEVICE, deviceProp.name);
-	cudaSetDevice(GPU_DEVICE);
-}
-
 __global__ void gemv_kernel(DATA_TYPE *a, DATA_TYPE *b, DATA_TYPE *c, uint64_t NI, uint64_t NJ)
 {
 	cooperative_groups::thread_block block = cooperative_groups::this_thread_block();
@@ -152,7 +142,8 @@ __global__ void gemv_kernel(DATA_TYPE *a, DATA_TYPE *b, DATA_TYPE *c, uint64_t N
 	uint64_t row = blockIdx.x * blockDim.x + threadIdx.x;
 	uint64_t tx = threadIdx.x;
 
-	__shared__ DATA_TYPE s_b[PREFETCH_COUNT][DIM_THREAD_BLOCK][BATCH_SIZE];
+	// __shared__ DATA_TYPE s_b[PREFETCH_COUNT][DIM_THREAD_BLOCK][BATCH_SIZE];
+	extern  __shared__ DATA_TYPE s_b[];
 
 	DATA_TYPE tmp = BETA * c[row];
 	__syncthreads();
@@ -167,7 +158,7 @@ __global__ void gemv_kernel(DATA_TYPE *a, DATA_TYPE *b, DATA_TYPE *c, uint64_t N
 			uint64_t base_index = fetch * BATCH_SIZE;
 			for (uint64_t k = 0; k < BATCH_SIZE; k++)
 			{
-				memcpy_async(s_b[fetch % PREFETCH_COUNT][tx][k], b[base_index + k], pipe);
+				memcpy_async(s_b[fetch % PREFETCH_COUNT * DIM_THREAD_BLOCK * BATCH_SIZE + tx * BATCH_SIZE + k], b[base_index + k], pipe);
 			}
 			pipe.commit();
 		}
@@ -185,7 +176,7 @@ __global__ void gemv_kernel(DATA_TYPE *a, DATA_TYPE *b, DATA_TYPE *c, uint64_t N
 		uint64_t base_index = compute * BATCH_SIZE;
 		for (uint64_t k = 0; k < BATCH_SIZE; k++)
 		{
-			tmp += ALPHA * a[row * NJ + base_index + k] * s_b[compute % PREFETCH_COUNT][tx][k];
+			tmp += ALPHA * a[row * NJ + base_index + k] * s_b[compute % PREFETCH_COUNT * DIM_THREAD_BLOCK * BATCH_SIZE + tx * BATCH_SIZE + k];
 		}
 		block.sync();
 	}
@@ -199,38 +190,19 @@ void gemvCuda(DATA_TYPE *A, DATA_TYPE *B, DATA_TYPE *C, DATA_TYPE *A_gpu, DATA_T
 	dim3 block(DIM_THREAD_BLOCK);
 	dim3 grid(NI / (DIM_THREAD_BLOCK));
 
+	int MaxBytesofSharedMemory = DIM_THREAD_BLOCK * BATCH_SIZE * PREFETCH_COUNT * sizeof(DATA_TYPE);
+	cudaFuncSetAttribute(gemv_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, MaxBytesofSharedMemory);
+
 	// t_start = rtclock();
 	cudaMemcpy(A_gpu, A, sizeof(DATA_TYPE) * NI * NJ, cudaMemcpyHostToDevice);
 	cudaMemcpy(B_gpu, B, sizeof(DATA_TYPE) * NJ, cudaMemcpyHostToDevice);
 	cudaMemcpy(C_gpu, C, sizeof(DATA_TYPE) * NI, cudaMemcpyHostToDevice);
-	gemv_kernel<<<grid, block>>>(A_gpu, B_gpu, C_gpu, NI, NJ);
+	gemv_kernel<<<grid, block, MaxBytesofSharedMemory>>>(A_gpu, B_gpu, C_gpu, NI, NJ);
 	cudaDeviceSynchronize();
 	cudaMemcpy(C, C_gpu, sizeof(DATA_TYPE) * NI, cudaMemcpyDeviceToHost);
 	// t_end = rtclock();
 
 	// fprintf(stdout, "GPU Runtime: %0.6lfs\n", t_end - t_start);
-}
-
-extern inline __attribute__((always_inline)) unsigned long rdtsc()
-{
-	unsigned long a, d;
-
-	__asm__ volatile("rdtsc"
-					 : "=a"(a), "=d"(d));
-
-	return (a | (d << 32));
-}
-
-extern inline __attribute__((always_inline)) unsigned long rdtsp()
-{
-	struct timespec tms;
-	if (clock_gettime(CLOCK_REALTIME, &tms))
-	{
-		return -1;
-	}
-	unsigned long ns = tms.tv_sec * 1000000000;
-	ns += tms.tv_nsec;
-	return ns;
 }
 
 int main(int argc, char *argv[])

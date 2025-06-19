@@ -25,186 +25,169 @@ using namespace nvcuda::experimental;
 
 #define PREFETCH_COUNT 2
 
-#define DIM_THREAD_BLOCK 256
+#define DIM_THREAD_BLOCK 64
 
 #ifndef SIZE
 #define SIZE 4096
 #endif
 
-// __global__ void add(float *a, float *b, float *c)
-// {
-//   int tid = blockIdx.x; // Handle the data at the index
-
-//   c[tid] = a[tid] + b[tid];
-// }
-
-// __global__ void scale(float *a, int size, int index)
-// {
-//   int i;
-//   int start = (index * size + index);
-//   int end = (index * size + size);
-
-//   for (i = start + 1; i < end; i++)
-//   {
-//     a[i] = (a[i] / a[start]);
-//   }
-// }
-
-// __global__ void reduce(float *a, int size, int index, int b_size)
-// {
-//   extern __shared__ float pivot[];
-//   int i;
-
-//   int tid = threadIdx.x;
-//   int bid = blockIdx.x;
-//   int block_size = b_size;
-
-//   int pivot_start = (index * size + index);
-//   int pivot_end = (index * size + size);
-
-//   int start;
-//   int end;
-//   int pivot_row;
-//   int my_row;
-
-//   if (tid == 0)
-//   {
-//     for (i = index; i < size; i++)
-//       pivot[i] = a[(index * size) + i];
-//   }
-
-//   __syncthreads();
-
-//   pivot_row = (index * size);
-//   my_row = (((block_size * bid) + tid) * size);
-//   start = my_row + index;
-//   end = my_row + size;
-
-//   if (my_row > pivot_row)
-//   {
-//     for (i = start + 1; i < end; i++)
-//     {
-//       a[i] = a[i] - (a[start] * pivot[(i - my_row)]);
-//     }
-//   }
-// }
-
-#define GPU_DEVICE 6
-
-void GPU_argv_init()
-{
-  cudaDeviceProp deviceProp;
-  cudaGetDeviceProperties(&deviceProp, GPU_DEVICE);
-  printf("setting device %d with name %s\n", GPU_DEVICE, deviceProp.name);
-  cudaSetDevice(GPU_DEVICE);
-}
-
-void initCPU(float *a, int N)
+void initCPU(float *a, uint64_t N)
 {
   srand((unsigned)2);
   // fill the arrays 'a' on the CPU
-  for (int i = 0; i < (N * N); i++)
+  for (uint64_t i = 0; i < (N * N); i++)
   {
     a[i] = ((rand() % 10) + 1);
   }
 }
 
-void initGPU(float *a_dev, int N)
+void initGPU(float *a_dev, uint64_t N)
 {
   srand((unsigned)2);
-  for (int i = 0; i < (N * N); i++)
+  for (uint64_t i = 0; i < (N * N); i++)
   {
     a_dev[i] = ((rand() % 10) + 1);
   }
 }
 
-__global__ void lud_kernel(float *a, int N)
+// __global__ void lud_kernel(float *a, uint64_t N)
+// {
+//   cooperative_groups::thread_block block = cooperative_groups::this_thread_block();
+//   pipeline pipe;
+//   // extern __shared__ float pivot[];
+//   __shared__ float pivot[SIZE * PREFETCH_COUNT];
+
+//   uint64_t fetch = 0;
+//   uint64_t end_tile = fetch + N;
+
+//   for (uint64_t compute = fetch; compute < end_tile; compute++)
+// 	{
+// 		for (; fetch < end_tile && fetch < compute + PREFETCH_COUNT; fetch++) 
+// 		{
+//       uint64_t tid = threadIdx.x;
+//       uint64_t bid = blockIdx.x;
+//       uint64_t block_size = blockDim.x;
+
+//       if (tid == 0 && bid == 0)
+//       {
+//         uint64_t start = (compute * N + compute);
+//         uint64_t end = (compute * N + N);
+
+//         for (uint64_t i = start + 1; i < end; i++)
+//           a[i] = (a[i] / a[start]);
+//       }
+//       block.sync();
+
+//       if (tid == 0)
+//       {
+//         for (uint64_t i = compute; i < N; i++)
+//           memcpy_async(pivot[(fetch % PREFETCH_COUNT) * N + i], a[(compute * N) + i], pipe);
+//       }
+//       // block.sync();
+//       pipe.commit();
+//     }
+//     if (fetch == end_tile)
+//     {
+//       for (uint64_t i = 0; i < PREFETCH_COUNT - 1; ++i)
+//       {
+//         pipe.commit();
+//       }
+//       ++fetch;
+//     }
+//     pipe.wait_prior<PREFETCH_COUNT - 1>();
+//     block.sync();
+
+//     uint64_t tid = threadIdx.x;
+//     uint64_t bid = blockIdx.x;
+//     uint64_t block_size = blockDim.x;
+
+//     uint64_t pivot_row = (compute * N);
+//     uint64_t my_row = (((block_size * bid) + tid) * N);
+//     uint64_t start = my_row + compute;
+//     uint64_t end = my_row + N;
+
+//     if (my_row > pivot_row)
+//     {
+//       for (uint64_t i = start + 1; i < end; i++)
+//       {
+//         a[i] = a[i] - (a[start] * pivot[(compute % PREFETCH_COUNT) * N + (i - my_row)]);
+//       }
+//     }
+//     block.sync();
+//   }
+// }
+
+__global__ void lud_kernel(float *a, uint64_t N)
 {
   cooperative_groups::thread_block block = cooperative_groups::this_thread_block();
   pipeline pipe;
   // extern __shared__ float pivot[];
   __shared__ float pivot[SIZE * PREFETCH_COUNT];
 
-  int fetch = 0;
-  int end_tile = fetch + N;
+  uint64_t batches = N / SIZE;
+  for (uint64_t b = 0; b < batches; b++) {
+    uint64_t tile_start = b * SIZE;
+    uint64_t tile_end = (b + 1) * SIZE;
 
-  for (int compute = fetch; compute < end_tile; compute++)
-	{
-		for (; fetch < end_tile && fetch < compute + PREFETCH_COUNT; fetch++) 
-		{
-      int tid = threadIdx.x;
-      int bid = blockIdx.x;
-      int block_size = blockDim.x;
+    uint64_t fetch = tile_start;
+    uint64_t end_tile = fetch + SIZE;
 
-      if (tid == 0 && bid == 0)
-      {
-        int start = (compute * N + compute);
-        int end = (compute * N + N);
-
-        for (int i = start + 1; i < end; i++)
-          a[i] = (a[i] / a[start]);
-      }
-      block.sync();
-
-      if (tid == 0)
-      {
-        for (int i = compute; i < N; i++)
-          memcpy_async(pivot[(fetch % PREFETCH_COUNT) * N + i], a[(compute * N) + i], pipe);
-      }
-      // block.sync();
-      pipe.commit();
-    }
-    if (fetch == end_tile)
+    for (uint64_t compute = fetch; compute < end_tile; compute++)
     {
-      for (int i = 0; i < PREFETCH_COUNT - 1; ++i)
+      for (; fetch < end_tile && fetch < compute + PREFETCH_COUNT; fetch++) 
       {
+        uint64_t tid = threadIdx.x;
+        uint64_t bid = blockIdx.x;
+        uint64_t block_size = blockDim.x;
+
+        if (tid == 0 && bid == 0)
+        {
+          uint64_t start = (compute * N + compute);
+          uint64_t end = (compute * N + end_tile);
+
+          for (uint64_t i = start + 1; i < end; i++)
+            a[i] = (a[i] / a[start]);
+        }
+        block.sync();
+
+        if (tid == 0)
+        {
+          for (uint64_t i = compute; i < end_tile; i++)
+            memcpy_async(pivot[(fetch % PREFETCH_COUNT) * SIZE + i % SIZE], a[(compute * N) + i], pipe);
+        }
         pipe.commit();
       }
-      ++fetch;
-    }
-    pipe.wait_prior<PREFETCH_COUNT - 1>();
-    block.sync();
-
-    int tid = threadIdx.x;
-    int bid = blockIdx.x;
-    int block_size = blockDim.x;
-
-    int pivot_row = (compute * N);
-    int my_row = (((block_size * bid) + tid) * N);
-    int start = my_row + compute;
-    int end = my_row + N;
-
-    if (my_row > pivot_row)
-    {
-      for (int i = start + 1; i < end; i++)
+      if (fetch == end_tile)
       {
-        a[i] = a[i] - (a[start] * pivot[(compute % PREFETCH_COUNT) * N + (i - my_row)]);
+        for (uint64_t i = 0; i < PREFETCH_COUNT - 1; ++i)
+        {
+          pipe.commit();
+        }
+        ++fetch;
       }
+      pipe.wait_prior<PREFETCH_COUNT - 1>();
+      block.sync();
+
+      uint64_t tid = threadIdx.x;
+      uint64_t bid = blockIdx.x;
+      uint64_t block_size = blockDim.x;
+
+      uint64_t pivot_row = (compute * N);
+      uint64_t my_row = (((block_size * bid) + tid) * N);
+      uint64_t start = my_row + compute;
+      uint64_t end = my_row + end_tile;
+
+      if (my_row > pivot_row)
+      {
+        for (uint64_t i = start + 1; i < end; i++)
+        {
+          a[i] = a[i] - (a[start] * pivot[(compute % PREFETCH_COUNT) * SIZE + (i - my_row) % SIZE]);
+        }
+      }
+      block.sync();
     }
     block.sync();
   }
-}
-
-extern inline __attribute__((always_inline)) unsigned long rdtsc()
-{
-  unsigned long a, d;
-
-  __asm__ volatile("rdtsc"
-                   : "=a"(a), "=d"(d));
-
-  return (a | (d << 32));
-}
-
-extern inline __attribute__((always_inline)) unsigned long rdtsp()
-{
-  struct timespec tms;
-  if (clock_gettime(CLOCK_REALTIME, &tms))
-  {
-    return -1;
-  }
-  unsigned long ns = tms.tv_sec * 1000000000;
-  ns += tms.tv_nsec;
-  return ns;
 }
 
 int main(int argc, char *argv[])
@@ -215,37 +198,36 @@ int main(int argc, char *argv[])
   float *a;
   float *c;
   float error;
-  int N;
-  int flag = 0;
+  uint64_t N;
+  uint64_t flag = 0;
 
   float **result;
   float **a_ref;
-  int blocks;
+  uint64_t blocks;
 
   float *dev_a;
-  int i;
-  int j;
-  int k;
+  uint64_t i;
+  uint64_t j;
+  uint64_t k;
   float l1;
   float u1;
 
-  N = SIZE;
+  N = atoi(argv[1]);
   // allocate memory on CPU
   a = (float *)malloc(sizeof(float) * N * N);
   c = (float *)malloc(sizeof(float) * N * N);
 
-  result = (float **)malloc(sizeof(float *) * N);
-  a_ref = (float **)malloc(sizeof(float *) * N);
+  result = (float **)malloc(N *sizeof(float *));
+  a_ref = (float **)malloc(N * sizeof(float *));
 
   for (i = 0; i < N; i++)
   {
-    result[i] = (float *)malloc(sizeof(float) * N);
-    a_ref[i] = (float *)malloc(sizeof(float) * N);
+    result[i] = (float *)malloc(N * sizeof(float));
+    a_ref[i] = (float *)malloc(N * sizeof(float));
   }
-
-  GPU_argv_init();
   initCPU(a, N);
-
+  
+  GPU_argv_init();
   initTrace();
   startCPU();
   // allocate the memory on the GPU
@@ -263,8 +245,9 @@ int main(int argc, char *argv[])
   //   reduce<<<blocks, 512, N * sizeof(float)>>>(dev_a, N, i, 512);
   // }
   blocks = ((N / DIM_THREAD_BLOCK));
-  // lud_kernel<<<blocks, DIM_THREAD_BLOCK, N * sizeof(float)>>>(dev_a, N);
+  // lud_kernel<<<blocks, DIM_THREAD_BLOCK, N * sizeof(float) * PREFETCH_COUNT>>>(dev_a, N);
   lud_kernel<<<blocks, DIM_THREAD_BLOCK>>>(dev_a, N);
+  cudaDeviceSynchronize();
   /*LU decomposition ends here*/
 
   cudaMemcpy(c, dev_a, N * N * sizeof(float), cudaMemcpyDeviceToHost); // copy array back to host

@@ -6,8 +6,16 @@ static int coco_ids[] = {1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,2
 void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, int ngpus, int clear)
 {
     list *options = read_data_cfg(datacfg);
-    char *train_images = option_find_str(options, "train", "data/train.list");
-    char *backup_directory = option_find_str(options, "backup", "/backup/");
+    // Ruihao
+    char *train_images_cfg = option_find_str(options, "train", "data/train.list");
+    char *backup_directory_cfg = option_find_str(options, "backup", "/backup/");
+    
+    char *env = getenv("UVMAsyncBench_BASE");
+    char train_images[256];
+    char backup_directory[256];
+    sprintf(train_images, "%s/%s", env, train_images_cfg);
+    sprintf(backup_directory, "%s/%s", env, backup_directory_cfg);
+    // Ruihao
 
     srand(time(0));
     char *base = basecfg(cfgfile);
@@ -55,31 +63,32 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     //args.type = INSTANCE_DATA;
     args.threads = 64;
 
+    // initTrace();
     pthread_t load_thread = load_data(args);
     double time;
     int count = 0;
     //while(i*imgs < N*120){
     while(get_current_batch(net) < net->max_batches){
-        if(l.random && count++%10 == 0){
-            printf("Resizing\n");
-            int dim = (rand() % 10 + 10) * 32;
-            if (get_current_batch(net)+200 > net->max_batches) dim = 608;
-            //int dim = (rand() % 4 + 16) * 32;
-            printf("%d\n", dim);
-            args.w = dim;
-            args.h = dim;
+        // if(l.random && count++%10 == 0){
+        //     printf("Resizing\n");
+        //     int dim = (rand() % 10 + 10) * 32;
+        //     if (get_current_batch(net)+200 > net->max_batches) dim = 608;
+        //     //int dim = (rand() % 4 + 16) * 32;
+        //     printf("%d\n", dim);
+        //     args.w = dim;
+        //     args.h = dim;
 
-            pthread_join(load_thread, 0);
-            train = buffer;
-            free_data(train);
-            load_thread = load_data(args);
+        //     pthread_join(load_thread, 0);
+        //     train = buffer;
+        //     free_data(train);
+        //     load_thread = load_data(args);
 
-            #pragma omp parallel for
-            for(i = 0; i < ngpus; ++i){
-                resize_network(nets[i], dim, dim);
-            }
-            net = nets[0];
-        }
+        //     #pragma omp parallel for
+        //     for(i = 0; i < ngpus; ++i){
+        //         resize_network(nets[i], dim, dim);
+        //     }
+        //     net = nets[0];
+        // }
         time=what_time_is_it_now();
         pthread_join(load_thread, 0);
         train = buffer;
@@ -151,6 +160,7 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     char buff[256];
     sprintf(buff, "%s/%s_final.weights", backup_directory, base);
     save_weights(net, buff);
+    // finiTrace();
 }
 
 
@@ -561,11 +571,13 @@ void validate_detector_recall(char *cfgfile, char *weightfile)
 
 void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen)
 {
-    printf("fine name is %s\n", filename);
     list *options = read_data_cfg(datacfg);
-    printf("read_data_cfg\n");
-    char *name_list = option_find_str(options, "names", "data/names.list");
-    printf("name_list is %s\n", name_list);
+    // Ruihao
+    char *name_list_cfg = option_find_str(options, "names", "data/names.list");
+    char *env = getenv("UVMAsyncBench_BASE");
+    char name_list[256];
+    sprintf(name_list, "%s/%s", env, name_list_cfg);
+    // Ruihao
     char **names = get_labels(name_list);
 
     image **alphabet = load_alphabet();
@@ -576,6 +588,8 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
     char buff[256];
     char *input = buff;
     float nms=.45;
+    // initTrace();
+    time=what_time_is_it_now();
     while(1){
         printf("fine name is %s\n", filename);
         if(filename){
@@ -597,7 +611,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
 
 
         float *X = sized.data;
-        time=what_time_is_it_now();
+        // time=what_time_is_it_now();
         startCPU();
         network_predict(net, X);
         endCPU();
@@ -624,6 +638,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         free_image(sized);
         if (filename) break;
     }
+    // finiTrace();
 }
 
 /*
@@ -792,6 +807,70 @@ void network_detect(network *net, image im, float thresh, float hier_thresh, flo
 }
 */
 
+void infer_detector(char *datacfg, char *cfgfile, char *weightfile)
+{
+    int curr = 0;
+    network *net = load_network(cfgfile, weightfile, 0);
+    srand(time(0));
+
+    list *options = read_data_cfg(datacfg);
+
+    // Ruihao
+    char *test_list_cfg = option_find_str(options, "valid", "data/valid.list");
+    char *env = getenv("UVMAsyncBench_BASE");
+    char test_list[256];
+    sprintf(test_list, "%s/%s", env, test_list_cfg);
+    // Ruihao
+    int classes = option_find_int(options, "classes", 2);
+
+    list *plist = get_paths(test_list);
+
+    char **paths = (char **)list_to_array(plist);
+    int m = plist->size;
+    m = net->max_batches * net->batch;
+    free_list(plist);
+
+    clock_t time;
+
+    data val, buffer;
+
+    load_args args = {0};
+    args.w = net->w;
+    args.h = net->h;
+    args.paths = paths;
+    args.classes = classes;
+    args.n = net->batch;
+    args.m = 0;
+    args.labels = 0;
+    args.d = &buffer;
+    args.type = OLD_CLASSIFICATION_DATA;
+
+    // initTrace();
+    pthread_t load_thread = load_data_in_thread(args);
+    for(curr = net->batch; curr <= m; curr += net->batch){
+    // while(get_current_batch(net) < net->max_batches || net->max_batches == 0){
+        time=clock();
+
+        pthread_join(load_thread, 0);
+        val = buffer;
+
+        if(curr < m){
+            args.paths = paths + curr;
+            if (curr + net->batch > m) args.n = m - curr;
+            load_thread = load_data_in_thread(args);
+        }
+        fprintf(stderr, "Loaded: %d images in %lf seconds\n", val.X.rows, sec(clock()-time));
+
+        time=clock();
+        matrix pred = network_predict_data(net, val);
+
+        fprintf(stderr, "%lf seconds, %d images, %d total\n", sec(clock()-time), val.X.rows, curr);
+        free_matrix(pred);
+        free_data(val);
+    }
+    // finiTrace();
+}
+
 void run_detector(int argc, char **argv)
 {
     char *prefix = find_char_arg(argc, argv, "-prefix", 0);
@@ -842,6 +921,9 @@ void run_detector(int argc, char **argv)
     if(0==strcmp(argv[2], "test")) test_detector(datacfg, cfg, weights, filename, thresh, hier_thresh, outfile, fullscreen);
     else if(0==strcmp(argv[2], "train")) train_detector(datacfg, cfg, weights, gpus, ngpus, clear);
     else if(0==strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights, outfile);
+    // Ruihao
+    else if(0==strcmp(argv[2], "infer")) infer_detector(datacfg, cfg, weights);
+    // Ruihao
     else if(0==strcmp(argv[2], "valid2")) validate_detector_flip(datacfg, cfg, weights, outfile);
     else if(0==strcmp(argv[2], "recall")) validate_detector_recall(cfg, weights);
     else if(0==strcmp(argv[2], "demo")) {

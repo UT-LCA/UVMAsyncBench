@@ -115,7 +115,7 @@ int cluster(int      npoints,				/* number of data points */
 
 		/* allocate device memory, invert data array (@ kmeans_cuda.cu) */
 		allocateMemory(npoints, nfeatures, nclusters, features);
-
+		
 		/* iterate nloops times for each number of clusters */
 		for(i = 0; i < nloops; i++)
 		{

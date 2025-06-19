@@ -327,37 +327,6 @@ void usage(int argc, char **argv)
     exit(1);
 }
 
-extern inline __attribute__((always_inline)) unsigned long rdtsc()
-{
-    unsigned long a, d;
-
-    __asm__ volatile("rdtsc"
-                     : "=a"(a), "=d"(d));
-
-    return (a | (d << 32));
-}
-
-extern inline __attribute__((always_inline)) unsigned long rdtsp()
-{
-    struct timespec tms;
-    if (clock_gettime(CLOCK_REALTIME, &tms))
-    {
-        return -1;
-    }
-    unsigned long ns = tms.tv_sec * 1000000000;
-    ns += tms.tv_nsec;
-    return ns;
-}
-
-#define GPU_DEVICE 6
-
-void GPU_argv_init()
-{
-    cudaDeviceProp deviceProp;
-    cudaGetDeviceProperties(&deviceProp, GPU_DEVICE);
-    printf("setting device %d with name %s\n", GPU_DEVICE, deviceProp.name);
-    cudaSetDevice(GPU_DEVICE);
-}
 int main(int argc, char *argv[])
 {
     uint64_t start_tsc = rdtsc();

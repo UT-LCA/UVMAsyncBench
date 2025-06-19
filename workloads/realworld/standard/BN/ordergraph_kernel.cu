@@ -30,9 +30,10 @@ using namespace nvcuda::experimental;
 
 #define PREFETCH_COUNT 2
 
-#define BLOCK_SIZE 256
+#define BLOCK_SIZE 64
 #define MAX_NBLOCKS 1024
 #define MIN_NBATCHES 16
+
 
 __device__ void Dincr(int *bit, int n);
 __device__ void DincrS(int *bit, int n);
@@ -121,121 +122,98 @@ __global__ void genScoreKernel(int sizepernode, float *D_localscore,
 
 __global__ void computeKernel(int taskperthr, int sizepernode,
                               float *D_localscore, bool *D_parent, int node,
-                              int total, float *D_Score, int *D_resP,
-                              int nbatches) {
+                              int total, float *D_Score, int *D_resP, int nbatches) {
   cooperative_groups::thread_block block = cooperative_groups::this_thread_block();
-  pipeline pipe;
-  __shared__ float lsinblock[PREFETCH_COUNT][BLOCK_SIZE];
+  __shared__ float lsinblock[BLOCK_SIZE];
+  
+  for (int b = 0; b < nbatches; b++) {
+    unsigned int bid = blockIdx.x * nbatches + b;
+    unsigned int tid = threadIdx.x;
+    unsigned int id = bid * (BLOCK_SIZE * nbatches) + tid;
 
-  int fetch = 0;
-  int end_tile = fetch + nbatches;
-  int bestparent[4] = {0}, parent[5] = {-1};
+    if (id * taskperthr >= total) return;
+  
+    int posN = 1, i, index, t, tmp;
+    int pre[NODE_N] = {0};
+    int parN = 0;
+    int bestparent[4] = {0}, parent[5] = {-1};
+    float bestls = -999999999999999, ls;
 
-  for (int compute = fetch; compute < end_tile; compute++) {
-    for (; fetch < end_tile && fetch < compute + PREFETCH_COUNT; fetch++) {
-      unsigned int bid = blockIdx.x * nbatches + fetch;
-      unsigned int tid = threadIdx.x;
-      unsigned int id = bid * (BLOCK_SIZE * nbatches) + tid;
+    for (i = 0; i < NODE_N; i++) {
+      if (D_parent[i] == 1) {
+        pre[posN++] = i;
+      }
+    }
 
-      int posN = 1, i, index, tmp;
-      int pre[NODE_N] = {0};
-      int parN = 0;
+    for (i = 0; i < taskperthr && ((id * taskperthr + i) < total); i++) {
 
-      float bestls = -999999999999999, ls;
+      D_findComb(parent, id * taskperthr + i, posN);
 
-      for (i = 0; i < NODE_N; i++) {
-        if (D_parent[i] == 1) {
-          pre[posN++] = i;
-        }
+      for (parN = 0; parN < 4; parN++) {
+        if (parent[parN] < 0)
+          break;
+        if (pre[parent[parN]] > node)
+          parent[parN] = pre[parent[parN]];
+        else
+          parent[parN] = pre[parent[parN]] + 1;
       }
 
-      for (i = 0; i < taskperthr && ((id * taskperthr + i) < total); i++) {
+      for (tmp = parN; tmp > 0; tmp--) {
+        parent[tmp] = parent[tmp - 1];
+      }
+      parent[0] = 0;
 
-        D_findComb(parent, id * taskperthr + i, posN);
-
-        for (parN = 0; parN < 4; parN++) {
-          if (parent[parN] < 0)
-            break;
-          if (pre[parent[parN]] > node)
-            parent[parN] = pre[parent[parN]];
-          else
-            parent[parN] = pre[parent[parN]] + 1;
-        }
-
-        for (tmp = parN; tmp > 0; tmp--) {
-          parent[tmp] = parent[tmp - 1];
-        }
-        parent[0] = 0;
-
-        index = D_findindex(parent, parN);
-        index += sizepernode * node;
-
+      index = D_findindex(parent, parN);
+      index += sizepernode * node;
+      if (index >=0 && index < NODE_N * sizepernode)
         ls = D_localscore[index];
 
-        if (ls > bestls) {
-          bestls = ls;
-          for (tmp = 0; tmp < 4; tmp++)
-            bestparent[tmp] = parent[tmp + 1];
-        }
+      if (ls > bestls) {
+        bestls = ls;
+        for (tmp = 0; tmp < 4; tmp++)
+          bestparent[tmp] = parent[tmp + 1];
       }
+    }
 
-      memcpy_async(lsinblock[fetch % PREFETCH_COUNT][tid], bestls, pipe);
-      pipe.commit();
-    }
-    if (fetch == end_tile) {
-      for (int i = 0; i < PREFETCH_COUNT - 1; ++i) {
-        pipe.commit();
-      }
-      ++fetch;
-    }
-    pipe.wait_prior<PREFETCH_COUNT - 1>();
+    lsinblock[tid] = bestls;
     block.sync();
 
-    int i, t;
-    unsigned int bid = blockIdx.x * nbatches + compute;
-    unsigned int tid = threadIdx.x;
-    // unsigned int id = bid * (BLOCK_SIZE * nbatches) + tid;
-
     for (i = BLOCK_SIZE / 2; i >= 1; i /= 2) {
+
       if (tid < i) {
-        if (lsinblock[compute % PREFETCH_COUNT][tid + i] >
-                lsinblock[compute % PREFETCH_COUNT][tid] &&
-            lsinblock[compute % PREFETCH_COUNT][tid + i] < 0) {
-          lsinblock[compute % PREFETCH_COUNT][tid] =
-              lsinblock[compute % PREFETCH_COUNT][tid + i];
-          lsinblock[compute % PREFETCH_COUNT][tid + i] = (float)(tid + i);
-        } else if (lsinblock[compute % PREFETCH_COUNT][tid + i] <
-                       lsinblock[compute % PREFETCH_COUNT][tid] &&
-                   lsinblock[compute % PREFETCH_COUNT][tid] < 0) {
-          lsinblock[compute % PREFETCH_COUNT][tid + i] = (float)tid;
+        if (lsinblock[tid + i] > lsinblock[tid] && lsinblock[tid + i] < 0) {
+          lsinblock[tid] = lsinblock[tid + i];
+          lsinblock[tid + i] = (float)(tid + i);
+        } else if (lsinblock[tid + i] < lsinblock[tid] && lsinblock[tid] < 0) {
+          lsinblock[tid + i] = (float)tid;
         } else if (lsinblock[tid] > 0 && lsinblock[tid + i] < 0) {
-          lsinblock[compute % PREFETCH_COUNT][tid] =
-              lsinblock[compute % PREFETCH_COUNT][tid + i];
-          lsinblock[compute % PREFETCH_COUNT][tid + i] = (float)(tid + i);
-        } else if (lsinblock[compute % PREFETCH_COUNT][tid] < 0 &&
-                   lsinblock[compute % PREFETCH_COUNT][tid + i] > 0) {
-          lsinblock[compute % PREFETCH_COUNT][tid + i] = (float)tid;
+          lsinblock[tid] = lsinblock[tid + i];
+          lsinblock[tid + i] = (float)(tid + i);
+        } else if (lsinblock[tid] < 0 && lsinblock[tid + i] > 0) {
+          lsinblock[tid + i] = (float)tid;
         }
       }
-      block.sync();
+      // block.sync();
     }
     block.sync();
 
     if (tid == 0) {
-      D_Score[bid] = lsinblock[compute % PREFETCH_COUNT][0];
+      D_Score[bid] = lsinblock[0];
       t = 0;
       for (i = 0; i < 7 && t < 128 && t >= 0; i++) {
-        t = (int)lsinblock[compute % PREFETCH_COUNT][(int)powf(2.0, i) + t];
+        t = (int)lsinblock[(int)powf(2.0, i) + t];
       }
-      lsinblock[compute % PREFETCH_COUNT][0] = (float)t;
+      lsinblock[0] = (float)t;
     }
     block.sync();
 
-    if (tid == (int)lsinblock[compute % PREFETCH_COUNT][0]) {
+    if (tid == (int)lsinblock[0]) {
       for (i = 0; i < 4; i++) {
         D_resP[bid * 4 + i] = bestparent[i];
       }
     }
+    block.sync();
+    
   }
 }
 

@@ -63,13 +63,13 @@ float percentDiff(double val1, double val2)
 	}
 }
 
-#define GPU_DEVICE 5
-
 //define the error threshold for the results "not matching"
 #define PERCENT_DIFF_ERROR_THRESHOLD 0.005
 
 /* Problem size */
-#define SIZE 1073741824
+#ifndef SIZE
+#define SIZE 8589934592
+#endif
 #define ITER 100
 uint64_t NI;
 
@@ -84,6 +84,10 @@ uint64_t NI;
 
 #ifndef NBLOCKS
 #define NBLOCKS 64
+#endif
+
+#ifndef SCALE
+#define SCALE 1
 #endif
 
 #define LCG_A 1.1f
@@ -126,15 +130,6 @@ void compareResults(DATA_TYPE* A, DATA_TYPE* A_outputFromGpu)
 	
 	// Print results
 	printf("Non-Matching CPU-GPU Outputs Beyond Error Threshold of %4.2f Percent: %d\n", PERCENT_DIFF_ERROR_THRESHOLD, fail);
-}
-
-
-void GPU_argv_init()
-{
-	cudaDeviceProp deviceProp;
-	cudaGetDeviceProperties(&deviceProp, GPU_DEVICE);
-	printf("setting device %d with name %s\n",GPU_DEVICE,deviceProp.name);
-	cudaSetDevice( GPU_DEVICE );
 }
 
 __global__ void vector_seq_kernel(DATA_TYPE *a, uint64_t NI, uint64_t iterations, uint64_t block_size)
@@ -198,7 +193,7 @@ void saxpyCuda(DATA_TYPE *A, DATA_TYPE *A_gpu, uint64_t iterations, uint64_t blo
 	dim3 block(DIM_THREAD_BLOCK);
 	dim3 grid(NI / block_size);
 
-	int MaxBytesofSharedMemory = DIM_THREAD_BLOCK * BATCH_SIZE * PREFETCH_COUNT * sizeof(DATA_TYPE);
+	int MaxBytesofSharedMemory = DIM_THREAD_BLOCK * BATCH_SIZE * PREFETCH_COUNT * sizeof(DATA_TYPE) * SCALE;
 	cudaFuncSetAttribute(vector_seq_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, MaxBytesofSharedMemory);
 
 	//t_start = rtclock();
@@ -210,26 +205,6 @@ void saxpyCuda(DATA_TYPE *A, DATA_TYPE *A_gpu, uint64_t iterations, uint64_t blo
 
 	//fprintf(stdout, "GPU Runtime: %0.6lfs\n", t_end - t_start);   
 }
-
-extern inline __attribute__((always_inline)) unsigned long rdtsc()
-{
-           unsigned long a, d;
-
-              __asm__ volatile("rdtsc" : "=a" (a), "=d" (d));
-
-                 return (a | (d << 32));
-}
-
-extern inline __attribute__((always_inline)) unsigned long rdtsp() {
-                struct timespec tms;
-                    if (clock_gettime(CLOCK_REALTIME, &tms)) {
-                                    return -1;
-                                        }
-                        unsigned long ns = tms.tv_sec * 1000000000;
-                            ns += tms.tv_nsec;
-                                return ns;
-}
-
 
 int main(int argc, char *argv[])
 {

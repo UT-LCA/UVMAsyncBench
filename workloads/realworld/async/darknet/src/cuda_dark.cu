@@ -327,16 +327,20 @@ void CUPTIAPI bufferCompleted(CUcontext ctx, uint32_t streamId, uint8_t *buffer,
     free(buffer);
 }
 
-// void initTrace() {
-//     return;
-// }
+#ifndef PROFILE
+void initTrace() {
+    printf("not Profile initTrace()\n");
+    return;
+}
 
-// void finiTrace() {
-//     return;
-// }
+void finiTrace() {
+    return;
+}
 
+#else
 void initTrace()
 {
+    printf("Profile initTrace()\n");
     size_t attrValue = 0, attrValueSize = sizeof(size_t);
 
     CUpti_ActivityUnifiedMemoryCounterConfig config[2];
@@ -400,7 +404,7 @@ void finiTrace()
     // Force flush any remaining activity buffers before termination of the application
     CUPTI_CALL(cuptiActivityFlushAll(1));
 }
-
+#endif
 
 void GPU_argv_init()
 {

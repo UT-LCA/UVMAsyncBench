@@ -1,8 +1,8 @@
 include ../../../common/make.config
 
-CC := $(CUDA_DIR)/bin/nvcc
+CC := $(CUDA_DIR)/bin/nvcc -code=$(SM_ARCH) -arch=$(COMPUTE)
 
-INCLUDE := $(CUDA_DIR)/include -I$(CUPTI_INCLUDE) -std=c++11 -arch=sm_80 -O3
+INCLUDE := $(CUDA_DIR)/include -I$(CUPTI_INCLUDE) -std=c++11 -O3
 
 SRC = srad.cu $(CUPTI_ADD_COMMON)/cupti_add.cpp $(CUPTI_ADD_COMMON)/cpu_timestamps.cpp 
 

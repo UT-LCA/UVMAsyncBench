@@ -113,6 +113,7 @@ extern "C" void forward_maxpool_layer_gpu(maxpool_layer layer, network net)
 extern "C" void backward_maxpool_layer_gpu(maxpool_layer layer, network net)
 {
     size_t n = layer.h*layer.w*layer.c*layer.batch;
+    size_t in_n = layer.out_h*layer.out_w*layer.c*layer.batch;
 
     cudaStream_t stream1;
     cudaStream_t stream2;
@@ -121,14 +122,14 @@ extern "C" void backward_maxpool_layer_gpu(maxpool_layer layer, network net)
     cudaStreamCreate(&stream2);
     cudaStreamCreate(&stream3);
 
-    cudaMemPrefetchAsync(layer.delta_gpu, n * sizeof(float), GPU_DEVICE, stream1);
+    cudaMemPrefetchAsync(layer.delta_gpu, in_n * sizeof(float), GPU_DEVICE, stream1);
     cudaStreamSynchronize(stream1);
-    cudaMemPrefetchAsync(layer.indexes_gpu, n * sizeof(float), GPU_DEVICE, stream2);
+    cudaMemPrefetchAsync(layer.indexes_gpu, in_n * sizeof(float), GPU_DEVICE, stream2);
     cudaStreamSynchronize(stream2);
     cudaMemPrefetchAsync(net.delta_gpu, n * sizeof(float), GPU_DEVICE, stream3);
     cudaStreamSynchronize(stream3);
 
-    backward_maxpool_layer_kernel<<<cuda_gridsize(n), BLOCK>>>(n, layer.h, layer.w, layer.c, layer.stride, layer.size, layer.pad, layer.delta_gpu, net.delta_gpu, layer.indexes_gpu);
+    backward_maxpool_layer_kernel<<<cuda_gridsize(n), BLOCK, 0, stream3>>>(n, layer.h, layer.w, layer.c, layer.stride, layer.size, layer.pad, layer.delta_gpu, net.delta_gpu, layer.indexes_gpu);
     check_error(cudaPeekAtLastError());
 }
 

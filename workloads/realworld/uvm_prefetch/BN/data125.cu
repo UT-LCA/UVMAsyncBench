@@ -2,7 +2,7 @@
 
 #ifndef _DATA_H_
 #define _DATA_H_
-const int NODE_N=25;
+const int NODE_N=125;
 const int STATE_N=2;
 const int DATA_N=600;
 int data[DATA_N*NODE_N]={

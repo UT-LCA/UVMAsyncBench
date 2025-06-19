@@ -25,9 +25,6 @@ using namespace nvcuda::experimental;
 
 #define PREFETCH_COUNT 2
 
-
-#define GPU_DEVICE 6
-
 //-----------------------------------------------------------------------------------------------//
 //                                            KERNELS //
 //-----------------------------------------------------------------------------------------------//
@@ -478,36 +475,6 @@ bool knn_c(const float *ref, int ref_nb, const float *query, int query_nb,
 /**
   * Example of use of kNN search CUDA.
   */
-extern inline __attribute__((always_inline)) unsigned long rdtsc()
-{
-  unsigned long a, d;
-
-  __asm__ volatile("rdtsc"
-                   : "=a"(a), "=d"(d));
-
-  return (a | (d << 32));
-}
-
-extern inline __attribute__((always_inline)) unsigned long rdtsp()
-{
-  struct timespec tms;
-  if (clock_gettime(CLOCK_REALTIME, &tms))
-  {
-    return -1;
-  }
-  unsigned long ns = tms.tv_sec * 1000000000;
-  ns += tms.tv_nsec;
-  return ns;
-}
-
-void GPU_argv_init()
-{
-  cudaDeviceProp deviceProp;
-  cudaGetDeviceProperties(&deviceProp, GPU_DEVICE);
-  printf("setting device %d with name %s\n", GPU_DEVICE, deviceProp.name);
-  cudaSetDevice(GPU_DEVICE);
-}
-
 int main(int argc, char *argv[])
 {
   uint64_t start_tsc = rdtsc();

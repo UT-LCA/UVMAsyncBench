@@ -68,35 +68,6 @@ double gettime() {
 ////////////////////////////////////////////////////////////////////////////////
 // Program main
 ////////////////////////////////////////////////////////////////////////////////
-extern inline __attribute__((always_inline)) unsigned long rdtsc()
-{
-	   unsigned long a, d;
-
-	      __asm__ volatile("rdtsc" : "=a" (a), "=d" (d));
-
-	         return (a | (d << 32));
-}
-
-extern inline __attribute__((always_inline)) unsigned long rdtsp() {
-		struct timespec tms;
-		    if (clock_gettime(CLOCK_REALTIME, &tms)) {
-			            return -1;
-				        }
-		        unsigned long ns = tms.tv_sec * 1000000000;
-			    ns += tms.tv_nsec;
-			        return ns;
-}
-
-#define GPU_DEVICE 6
-
-void GPU_argv_init()
-{
-  cudaDeviceProp deviceProp;
-  cudaGetDeviceProperties(&deviceProp, GPU_DEVICE);
-  printf("setting device %d with name %s\n", GPU_DEVICE, deviceProp.name);
-  cudaSetDevice(GPU_DEVICE);
-}
-
 int
 main( int argc, char** argv) 
 {
@@ -199,15 +170,15 @@ void runTest( int argc, char** argv)
 	memcpy(referrence_cuda, referrence, sizeof(int) * size);
 	memcpy(matrix_cuda, input_itemsets, sizeof(int) * size);
 
-	cudaStream_t stream1;
-	cudaStream_t stream2;
-	cudaStreamCreate(&stream1);
-	cudaStreamCreate(&stream2);
+	// cudaStream_t stream1;
+	// cudaStream_t stream2;
+	// cudaStreamCreate(&stream1);
+	// cudaStreamCreate(&stream2);
 
-	cudaMemPrefetchAsync(referrence_cuda, sizeof(int) * size, GPU_DEVICE, stream1);
-	cudaStreamSynchronize(stream1);
-	cudaMemPrefetchAsync(matrix_cuda, sizeof(int) * size, GPU_DEVICE, stream2);
-	cudaStreamSynchronize(stream2);
+	// cudaMemPrefetchAsync(referrence_cuda, sizeof(int) * size, GPU_DEVICE, stream1);
+	// cudaStreamSynchronize(stream1);
+	// cudaMemPrefetchAsync(matrix_cuda, sizeof(int) * size, GPU_DEVICE, stream2);
+	// cudaStreamSynchronize(stream2);
 
 	dim3 dimGrid;
 	dim3 dimBlock(BLOCK_SIZE, 1);
@@ -224,7 +195,9 @@ void runTest( int argc, char** argv)
 	for( int i = 1 ; i <= block_width ; i++) {
 		dimGrid.x = i;
 		dimGrid.y = 1;
-		needle_cuda_shared_1<<<dimGrid, dimBlock, 0, stream2>>>(referrence_cuda, matrix_cuda
+		// needle_cuda_shared_1<<<dimGrid, dimBlock, 0, stream2>>>(referrence_cuda, matrix_cuda
+		//                                       ,max_cols, penalty, i, block_width, block_size); 
+		needle_cuda_shared_1<<<dimGrid, dimBlock>>>(referrence_cuda, matrix_cuda
 		                                      ,max_cols, penalty, i, block_width, block_size); 
 	}
 	//printf("Processing bottom-right matrix\n");
@@ -232,7 +205,9 @@ void runTest( int argc, char** argv)
 	for( int i = block_width - 1  ; i >= 1 ; i--){
 		dimGrid.x = i;
 		dimGrid.y = 1;
-		needle_cuda_shared_2<<<dimGrid, dimBlock, 0, stream2>>>(referrence_cuda, matrix_cuda
+		// needle_cuda_shared_2<<<dimGrid, dimBlock, 0, stream2>>>(referrence_cuda, matrix_cuda
+		//                                       ,max_cols, penalty, i, block_width, block_size); 
+		needle_cuda_shared_2<<<dimGrid, dimBlock>>>(referrence_cuda, matrix_cuda
 		                                      ,max_cols, penalty, i, block_width, block_size); 
 	}
 	cudaDeviceSynchronize();

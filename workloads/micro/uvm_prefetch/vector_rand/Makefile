@@ -1,12 +1,42 @@
 include ../../../common/make.config
 
-NVCCCFLAGS = -I$(CUPTI_INCLUDE) -L$(CUPTI_LIB_DIR) -std=c++11 -lcuda -lcupti -arch=sm_80 -O3
+NVCCCFLAGS = -code=$(SM_ARCH) -arch=$(COMPUTE) -I$(CUPTI_INCLUDE) -L$(CUPTI_LIB_DIR) -std=c++11 -lcuda -lcupti -O3
 NVCC = $(CUDA_DIR)/bin/nvcc
 
 EXECUTABLE := vector_rand
 CUFILES := vector_rand.cu $(CUPTI_ADD_COMMON)/cupti_add.cpp $(CUPTI_ADD_COMMON)/cpu_timestamps.cpp
 
+EXECUTABLE_2 := vector_rand_2
+CUFILES_2:= vector_rand.cu $(CUPTI_ADD_COMMON)/cupti_add.cpp $(CUPTI_ADD_COMMON)/cpu_timestamps.cpp -DSIZE=8589934592 -DNBLOCK=256 -DDIM_THREAD_BLOCK=256 -DBATCH_SIZE=2
+
+EXECUTABLE_4 := vector_rand_4
+CUFILES_4:= vector_rand.cu $(CUPTI_ADD_COMMON)/cupti_add.cpp $(CUPTI_ADD_COMMON)/cpu_timestamps.cpp -DSIZE=8589934592 -DNBLOCK=256 -DDIM_THREAD_BLOCK=256 -DBATCH_SIZE=4
+ 
+EXECUTABLE_8 := vector_rand_8
+CUFILES_8:= vector_rand.cu $(CUPTI_ADD_COMMON)/cupti_add.cpp $(CUPTI_ADD_COMMON)/cpu_timestamps.cpp -DSIZE=8589934592 -DNBLOCK=256 -DDIM_THREAD_BLOCK=256 -DBATCH_SIZE=8
+
+EXECUTABLE_16 := vector_rand_16
+CUFILES_16:= vector_rand.cu $(CUPTI_ADD_COMMON)/cupti_add.cpp $(CUPTI_ADD_COMMON)/cpu_timestamps.cpp -DSIZE=8589934592 -DNBLOCK=256 -DDIM_THREAD_BLOCK=256 -DBATCH_SIZE=16
+
+EXECUTABLE_32 := vector_rand_32
+CUFILES_32:= vector_rand.cu $(CUPTI_ADD_COMMON)/cupti_add.cpp $(CUPTI_ADD_COMMON)/cpu_timestamps.cpp -DSIZE=8589934592 -DNBLOCK=256 -DDIM_THREAD_BLOCK=256 -DBATCH_SIZE=32
+
+EXECUTABLE_64 := vector_rand_64
+CUFILES_64:= vector_rand.cu $(CUPTI_ADD_COMMON)/cupti_add.cpp $(CUPTI_ADD_COMMON)/cpu_timestamps.cpp -DSIZE=8589934592 -DNBLOCK=256 -DDIM_THREAD_BLOCK=256 -DBATCH_SIZE=64
+
+EXECUTABLE_128 := vector_rand_128
+CUFILES_128:= vector_rand.cu $(CUPTI_ADD_COMMON)/cupti_add.cpp $(CUPTI_ADD_COMMON)/cpu_timestamps.cpp -DSIZE=8589934592 -DNBLOCK=256 -DDIM_THREAD_BLOCK=256 -DBATCH_SIZE=128
+
+
 all:
 	$(NVCC) ${NVCCCFLAGS} ${CUFILES} ${DEF} -o ${EXECUTABLE}
+
+	$(NVCC) ${NVCCCFLAGS} ${CUFILES_2} ${DEF} -o ${EXECUTABLE_2}
+	$(NVCC) ${NVCCCFLAGS} ${CUFILES_4} ${DEF} -o ${EXECUTABLE_4}
+	$(NVCC) ${NVCCCFLAGS} ${CUFILES_8} ${DEF} -o ${EXECUTABLE_8}
+	$(NVCC) ${NVCCCFLAGS} ${CUFILES_16} ${DEF} -o ${EXECUTABLE_16}
+	$(NVCC) ${NVCCCFLAGS} ${CUFILES_32} ${DEF} -o ${EXECUTABLE_32}
+	$(NVCC) ${NVCCCFLAGS} ${CUFILES_64} ${DEF} -o ${EXECUTABLE_64}
+	$(NVCC) ${NVCCCFLAGS} ${CUFILES_128} ${DEF} -o ${EXECUTABLE_128}
 clean:
 	rm -f *.o vector_rand
